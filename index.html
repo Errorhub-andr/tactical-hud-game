@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TACTICAL HUD - DEFENSE COMMAND</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #000;
+            color: #10b981;
+            font-family: monospace;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            position: relative;
+        }
+
+        body::after {
+            content: " ";
+            display: block;
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%);
+            z-index: 40;
+            background-size: 100% 3px;
+            pointer-events: none;
+        }
+
+        #screen-shake {
+            width: 100%;
+            height: 100%;
+            border: 3px solid #064e3b;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 8px;
+            position: relative;
+        }
+
+        .overlay-screen {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.95);
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            text-align: center;
+            gap: 15px;
+        }
+
+        .overlay-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #34d399;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
+        }
+
+        .overlay-desc {
+            font-size: 11px;
+            color: #059669;
+            line-height: 1.5;
+            max-width: 280px;
+        }
+
+        .btn-large {
+            background: #022c22;
+            border: 2px solid #059669;
+            color: #34d399;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: bold;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 0 12px rgba(5, 150, 105, 0.4);
+            margin-top: 10px;
+        }
+        .btn-large:active { transform: scale(0.95); }
+
+        .btn-red-large {
+            background: #450a0a;
+            border-color: #dc2626;
+            color: #fca5a5;
+            box-shadow: 0 0 12px rgba(220, 38, 38, 0.4);
+        }
+
+        .top-bar {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            border-bottom: 1px solid #065f46;
+            padding-bottom: 6px;
+        }
+
+        .row-between {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+        }
+
+        .title { font-weight: bold; color: #34d399; }
+        .amber { color: #f59e0b; }
+        .white { color: #fff; font-weight: bold; }
+
+        .hp-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10px;
+        }
+        .hp-label { color: #ef4444; font-weight: bold; }
+        .hp-track {
+            flex: 1;
+            height: 10px;
+            border: 1px solid #991b1b;
+            background-color: rgba(69, 10, 10, 0.5);
+            padding: 1px;
+            border-radius: 2px;
+        }
+        #hp-bar {
+            height: 100%;
+            width: 100%;
+            background-color: #ef4444;
+            box-shadow: 0 0 8px #ef4444;
+            transition: width 0.3s ease;
+        }
+
+        .radar-viewport {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            min-height: 0;
+        }
+
+        #radar-box {
+            width: 220px;
+            height: 220px;
+            border: 2px solid rgba(16, 185, 129, 0.8);
+            border-radius: 50%;
+            position: relative;
+            background: rgba(6, 78, 59, 0.2);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+            overflow: hidden;
+        }
+
+        .radar-circle-1 { position: absolute; inset: 20px; border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 50%; pointer-events: none; }
+        .radar-circle-2 { position: absolute; inset: 55px; border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 50%; pointer-events: none; }
+        .radar-line-h { position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: rgba(16, 185, 129, 0.25); pointer-events: none; }
+        .radar-line-v { position: absolute; left: 50%; top: 0; width: 1px; height: 100%; background: rgba(16, 185, 129, 0.25); pointer-events: none; }
+
+        .radar-core {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 10px; height: 10px;
+            margin-top: -5px; margin-left: -5px;
+            background: #34d399;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #34d399;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        @keyframes radarRotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .radar-sweep {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg at 50% 50%, rgba(16, 185, 129, 0) 0deg, rgba(16, 185, 129, 0) 270deg, rgba(16, 185, 129, 0.7) 360deg);
+            animation: radarRotate 2.5s linear infinite;
+            pointer-events: none;
+        }
+
+        .hostile-dot {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            background-color: #ef4444;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #ef4444;
+            cursor: pointer;
+            z-index: 20;
+        }
+
+        .bottom-bar {
+            border-top: 1px solid #065f46;
+            padding-top: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        #target-status {
+            font-size: 10px;
+            font-weight: bold;
+            color: #34d399;
+            min-height: 14px;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+        }
+
+        .btn {
+            background: #022c22;
+            border: 1px solid #047857;
+            color: #6ee7b7;
+            font-family: inherit;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 8px 0;
+            border-radius: 3px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .btn:active { transform: scale(0.95); }
+        .btn-red { background: #450a0a; border-color: #b91c1c; color: #fca5a5; }
+
+        @keyframes shakeScreen {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(-5px, 3px); }
+            50% { transform: translate(5px, -3px); }
+            75% { transform: translate(-3px, -2px); }
+            100% { transform: translate(0, 0); }
+        }
+        .shake-active { animation: shakeScreen 0.3s ease-in-out; }
+    </style>
+</head>
+<body id="main-body">
+
+    <!-- قائمة البداية -->
+    <div id="start-screen" class="overlay-screen">
+        <div class="overlay-title">TACTICAL DEFENSE // MK-IV</div>
+        <div class="overlay-desc">PROTECT THE BASE CORE FROM ENEMY MISSILES. TAP TARGETS OR LAUNCH INTERCEPTORS BEFORE CORE BREACH!</div>
+        <button id="btn-start-game" class="btn-large">[ START MISSION ]</button>
+    </div>
+
+    <!-- شاشة Game Over -->
+    <div id="gameover-screen" class="overlay-screen" style="display: none;">
+        <div class="overlay-title" style="color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.6);">[ BASE DESTROYED ]</div>
+        <div class="overlay-desc" style="color: #fca5a5;">CORE BREACH CONFIRMED. SYSTEM OVERRIDE FAILED.</div>
+        <div style="font-size: 12px; color: #fbbf24;">SURVIVED: <span id="final-wave" class="white">WAVE 1</span></div>
+        <button id="btn-restart-game" class="btn-large btn-red-large">[ RESTART MISSION ]</button>
+    </div>
+
+    <div id="screen-shake">
+        
+        <div class="top-bar">
+            <div class="row-between">
+                <span class="title">BASE CMD // <span id="wave-title" class="amber">WAVE 1</span></span>
+                <span>AMMO: <span id="ammo-val" class="white">15</span>/15</span>
+            </div>
+            <div class="hp-container">
+                <span class="hp-label">CORE HP:</span>
+                <div class="hp-track">
+                    <div id="hp-bar"></div>
+                </div>
+                <span id="hp-text" class="white">100%</span>
+            </div>
+            <div class="row-between" style="font-size: 9px; color: #059669;">
+                <span>SHIELD: <span id="shield-val" style="color:#34d399;">ONLINE</span></span>
+                <span>RADAR PWR: <span id="power-val" style="color:#34d399;">98.4%</span></span>
+            </div>
+        </div>
+
+        <div class="radar-viewport">
+            <div id="radar-box">
+                <div class="radar-core"></div>
+                <div class="radar-circle-1"></div>
+                <div class="radar-circle-2"></div>
+                <div class="radar-line-h"></div>
+                <div class="radar-line-v"></div>
+                <div class="radar-sweep"></div>
+            </div>
+        </div>
+
+        <div class="bottom-bar">
+            <div id="target-status">DEFEND THE CORE! TAP OR LAUNCH</div>
+            <div class="controls-grid">
+                <button id="btn-wave" class="btn">WAVE</button>
+                <button id="btn-fire" class="btn btn-red">LAUNCH</button>
+                <button id="btn-scan" class="btn">SCAN</button>
+                <button id="btn-defcon" class="btn">DEFCON</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        var currentWave = 1;
+        var activeTargetsCount = 0;
+        var coreHp = 100;
+        var ammo = 15;
+        var gameStarted = false;
+
+        // دالة إخراج الأصوات الرقمية بدون ملفات خارجية
+        function playSound(type) {
+            try {
+                var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                var osc = audioCtx.createOscillator();
+                var gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                var now = audioCtx.currentTime;
+
+                if (type === 'fire') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(700, now);
+                    osc.frequency.exponentialRampToValueAtTime(100, now + 0.25);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'hit') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(180, now);
+                    osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+                    gain.gain.setValueAtTime(0.4, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                    osc.start(now);
+                    osc.stop(now + 0.2);
+                } else if (type === 'alarm') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(500, now);
+                    osc.frequency.linearRampToValueAtTime(850, now + 0.15);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                }
+            } catch(e) {}
+        }
+
+        setInterval(function() {
+            var powerVal = document.getElementById('power-val');
+            if (powerVal) {
+                powerVal.innerText = (98 + Math.random() * 1.9).toFixed(1) + "%";
+            }
+        }, 1000);
+
+        function startGame() {
+            gameStarted = true;
+            coreHp = 100;
+            currentWave = 1;
+            ammo = 15;
+            
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('gameover-screen').style.display = 'none';
+            document.getElementById('ammo-val').innerText = ammo;
+            
+            updateCoreHp();
+            spawnWave(currentWave);
+        }
+
+        function spawnWave(waveNumber) {
+            if(!gameStarted || coreHp <= 0) return;
+
+            var radarBox = document.getElementById('radar-box');
+            var oldDots = document.querySelectorAll('.hostile-dot');
+            for(var k=0; k<oldDots.length; k++) {
+                oldDots[k].remove();
+            }
+
+            activeTargetsCount = waveNumber + 2;
+            document.getElementById('wave-title').innerText = "WAVE " + waveNumber;
+            document.getElementById('target-status').innerText = "THREATS INCOMING: " + activeTargetsCount;
+
+            for (var i = 0; i < activeTargetsCount; i++) {
+                createHostileDot(radarBox, waveNumber);
+            }
+        }
+
+        function createHostileDot(radarBox, waveNumber) {
+            var dot = document.createElement('div');
+            dot.className = 'hostile-dot';
+
+            var angle = Math.random() * Math.PI * 2;
+            var distance = Math.random() * 60 + 30; 
+            var startX = 110 + Math.cos(angle) * distance - 7; 
+            var startY = 110 + Math.sin(angle) * distance - 7;
+
+            dot.style.left = startX + 'px';
+            dot.style.top = startY + 'px';
+
+            var duration = Math.max(4.5 - waveNumber * 0.3, 2);
+            dot.style.transition = 'all ' + duration + 's linear';
+
+            radarBox.appendChild(dot);
+
+            setTimeout(function() {
+                dot.style.left = '103px';
+                dot.style.top = '103px';
+            }, 50);
+
+            setTimeout(function() {
+                if (dot.parentElement && gameStarted) {
+                    dot.remove();
+                    activeTargetsCount--;
+                    
+                    coreHp -= 20;
+                    if(coreHp < 0) coreHp = 0;
+                    
+                    playSound('alarm');
+                    updateCoreHp();
+                    triggerScreenShake();
+                    checkWaveStatus();
+                }
+            }, duration * 1000);
+
+            dot.onclick = function(e) {
+                e.stopPropagation();
+                destroyTarget(dot);
+            };
+        }
+
+        function updateCoreHp() {
+            var hpBar = document.getElementById('hp-bar');
+            var hpText = document.getElementById('hp-text');
+            var shieldVal = document.getElementById('shield-val');
+
+            hpBar.style.width = coreHp + "%";
+            hpText.innerText = coreHp + "%";
+
+            if(coreHp > 30) {
+                hpBar.style.backgroundColor = "#ef4444";
+                shieldVal.innerText = "ONLINE";
+                shieldVal.style.color = "#34d399";
+            } else if(coreHp <= 30 && coreHp > 0) {
+                hpBar.style.backgroundColor = "#f59e0b";
+                shieldVal.innerText = "WARNING";
+                shieldVal.style.color = "#f59e0b";
+            }
+            
+            if(coreHp <= 0) {
+                hpBar.style.width = "0%";
+                shieldVal.innerText = "DESTROYED";
+                shieldVal.style.color = "#ef4444";
+                gameStarted = false;
+
+                var oldDots = document.querySelectorAll('.hostile-dot');
+                for(var k=0; k<oldDots.length; k++) {
+                    oldDots[k].remove();
+                }
+
+                document.getElementById('final-wave').innerText = "WAVE " + currentWave;
+                document.getElementById('gameover-screen').style.display = 'flex';
+            }
+        }
+
+        function triggerScreenShake() {
+            var container = document.getElementById('screen-shake');
+            container.className = 'shake-active';
+            setTimeout(function() {
+                container.className = '';
+            }, 300);
+        }
+
+        function destroyTarget(dot) {
+            if(!gameStarted) return;
+            playSound('hit');
+            dot.style.transform = "scale(2)";
+            dot.style.backgroundColor = "#f59e0b";
+            setTimeout(function() {
+                dot.remove();
+                activeTargetsCount--;
+                checkWaveStatus();
+            }, 200);
+        }
+
+        function checkWaveStatus() {
+            if (activeTargetsCount <= 0 && coreHp > 0 && gameStarted) {
+                document.getElementById('target-status').innerText = "WAVE CLEARED! PRESS [WAVE]";
+                ammo = Math.min(15, ammo + 5);
+                document.getElementById('ammo-val').innerText = ammo;
+            }
+        }
+
+        window.onload = function() {
+            document.getElementById('btn-start-game').onclick = startGame;
+            document.getElementById('btn-restart-game').onclick = startGame;
+
+            document.getElementById('btn-wave').onclick = function() {
+                if(coreHp > 0 && gameStarted && activeTargetsCount <= 0) {
+                    currentWave++;
+                    spawnWave(currentWave);
+                }
+            };
+
+            document.getElementById('btn-fire').onclick = function() {
+                if (coreHp <= 0 || !gameStarted) return;
+                if (ammo > 0) {
+                    var firstTarget = document.querySelector('.hostile-dot');
+                    if (firstTarget) {
+                        ammo--;
+                        playSound('fire');
+                        document.getElementById('ammo-val').innerText = ammo;
+                        document.getElementById('target-status').innerText = "MISSILE HIT!";
+                        destroyTarget(firstTarget);
+                    } else {
+                        document.getElementById('target-status').innerText = "NO TARGETS!";
+                    }
+                } else {
+                    document.getElementById('target-status').innerText = "OUT OF AMMO!";
+                }
+            };
+
+            document.getElementById('btn-scan').onclick = function() {
+                if (coreHp <= 0 || !gameStarted) return;
+                var statusEl = document.getElementById('target-status');
+                statusEl.innerText = "SCANNING... " + activeTargetsCount + " THREATS";
+                setTimeout(function() {
+                    statusEl.innerText = activeTargetsCount > 0 ? "THREATS: " + activeTargetsCount : "SECTOR SECURE";
+                }, 1000);
+            };
+
+            var defcon1 = false;
+            document.getElementById('btn-defcon').onclick = function() {
+                defcon1 = !defcon1;
+                var bodyEl = document.getElementById('main-body');
+                var btnDefcon = document.getElementById('btn-defcon');
+                if (defcon1) {
+                    bodyEl.style.backgroundColor = "#200000";
+                    bodyEl.style.color = "#ef4444";
+                    btnDefcon.innerText = "DEF 1";
+                } else {
+                    bodyEl.style.backgroundColor = "#000000";
+                    bodyEl.style.color = "#10b981";
+                    btnDefcon.innerText = "DEFCON";
+                }
+            };
+        };
+    </script>
+</body>
+  </html>
+  
